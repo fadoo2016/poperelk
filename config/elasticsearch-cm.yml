@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch
+  namespace: elk
+data:
+  es1: |-
+    cluster.name: "docker-cluster"
+    network.host: 0.0.0.0
+    #node.name: "es1"
+    #cluster.initial_master_nodes: "es1"
+
+    #----------------------- BEGIN SECURITY AUTO CONFIGURATION -----------------------
+    #
+    # The following settings, TLS certificates, and keys have been automatically
+    # generated to configure Elasticsearch security features on 12-11-2022 11:29:11
+    #
+    # --------------------------------------------------------------------------------
+
+    # Enable security features
+    xpack.security.enabled: true
+    xpack.license.self_generated.type: trial
+
+    #xpack.security.enrollment.enabled: true
+
+    # Enable encryption for HTTP API client connections, such as Kibana, Logstash, and Agents
+    #xpack.security.http.ssl:
+    #  enabled: false
+
+    # Enable encryption and mutual authentication between cluster nodes
+    #xpack.security.transport.ssl:
+    #  enabled: false
+
+    # Create a new cluster with the current node only
+    # Additional nodes can still join the cluster later
+
+    #----------------------- END SECURITY AUTO CONFIGURATION -------------------------
+
+    #http.cors.enabled: true
+    #http.cors.allow-origin: "*"
+    #http.host: 0.0.0.0

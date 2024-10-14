@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: elasticsearch
+  namespace: elk
+  labels:
+    type: local
+spec:
+  storageClassName: elasticsearch-data
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/home/ubuntu/data/elasticsearch"
+  claimRef:
+    name: es-pv-claim
+    namespace: elk
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: es-pv-claim
+  namespace: elk
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: elasticsearch-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    k8s-app: elasticsearch
+  name: elasticsearch
+  namespace: elk
+spec:
+  selector:
+    matchLabels:
+      k8s-app: elasticsearch
+  template:
+    metadata:
+      labels:
+        k8s-app: elasticsearch
+    spec:
+      containers:
+        - image: docker.elastic.co/elasticsearch/elasticsearch:8.15.2
+          imagePullPolicy: IfNotPresent
+          name: elasticsearch
+          ports:
+            - containerPort: 9200
+              name: rest
+              protocol: TCP
+            - containerPort: 9300
+              name: socket
+              protocol: TCP
+          env:
+            - name: ES_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+            - name: node.name
+              value: "elasticsearch"
+            - name: "discovery.type"
+              value: "single-node"
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: popersecret
+                  key: es-password
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              subPath: es1
+            - name: es-data
+              mountPath: /usr/share/elasticsearch/data
+      volumes:
+        - name: config
+          configMap:
+            defaultMode: 429
+            name: elasticsearch
+        - name: es-data
+          persistentVolumeClaim:
+            claimName: es-pv-claim
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: elasticsearch
+  namespace: elk
+spec:
+  selector:
+    k8s-app: elasticsearch
+  ports:
+    - port: 9200
+      protocol: TCP 
+      targetPort: rest
