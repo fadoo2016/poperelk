@@ -1,3 +1,35 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: logstash
+  namespace: elk
+  labels:
+    type: local
+spec:
+  storageClassName: logstash-data
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/home/ubuntu/data/logstash"
+  claimRef:
+    name: ls-pv-claim
+    namespace: elk
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ls-pv-claim
+  namespace: elk
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: logstash-data
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +49,17 @@ spec:
       containers:
         - name: logstash
           image: logstash:8.15.2
+          command:
+            - bash 
+            - -c 
+            - |
+              bin/logstash-plugin install  file:///tmp/logstash-offline-plugins-8.15.2.zip
+              bin/logstash
+          args:
+            #- "--config.reload.automatic"
           env:
+            - name: LS_JAVA_OPTS
+              value: "-Xmx512m"
             - name: ELASTICSEARCH_HOSTS
               value: http://elasticsearch:9200
             - name: LOGSTASH_USERNAME
@@ -40,12 +82,24 @@ spec:
             - containerPort: 5044
               name: tcp
               protocol: TCP
+          resources:
+            limits:
+              memory: 512Mi
+              cpu: 0.5
+            requests:
+              cpu: 0.1
+              memory: 256Mi
           volumeMounts:
             - name: config
               mountPath: /usr/share/logstash/config/
-            - name: pipeline
-              mountPath: /usr/share/logstash/pipeline/
+            - name: ls-data
+              subPath: logstash-offline-plugins-8.15.2.zip
+              readOnly: true
+              mountPath: /tmp/logstash-offline-plugins-8.15.2.zip
       volumes:
+        - name: ls-data
+          persistentVolumeClaim:
+            claimName: ls-pv-claim
         - name: config
           configMap:
             defaultMode: 429
@@ -53,13 +107,15 @@ spec:
             items:
               - key: logstash.yml
                 path: logstash.yml
-        - name: pipeline
-          configMap:
-            defaultMode: 429
-            name: logstash-config
-            items:
-              - key: logstash.conf
-                path: logstash.conf
+              - key: pipelines.yml
+                path: pipelines.yml
+       #- name: pipeline
+       #  configMap:
+       #    defaultMode: 429
+       #    name: logstash-config
+       #    items:
+       #      - key: logstash.conf
+       #        path: logstash.conf
 ---
 apiVersion: v1
 kind: Service

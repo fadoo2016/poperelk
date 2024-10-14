@@ -8,7 +8,7 @@ data:
     http.host: 0.0.0.0
     node.name: logstash
     http.port: 9600
-    path.config: /usr/share/logstash/pipeline
+    #path.config: /usr/share/logstash/pipeline
     config.reload.automatic: true
     xpack.monitoring.enabled: true
     xpack.monitoring.elasticsearch.username: logstash_system
@@ -16,111 +16,125 @@ data:
     xpack.monitoring.elasticsearch.hosts: ["http://elasticsearch:9200"]
     xpack.monitoring.collection.interval: 10s
 
-  logstash.conf: |
-    input {
-      syslog {
-        port => 8088
-      }
-      tcp {
-        port => 4567
-      }
-    }
+  pipelines.yml: |
+    - pipeline.id: syslog-server
+      config.string: |
+        input { syslog { port => 8088 } }
+        filter {
+          if ([message] =~ "heroku (web\.\d+)") {
+            drop {}
+          }
 
-    filter {
-      if ([app_type] == "combine") {
-        grok {
-          match => { "message" => "(?<myfield>[\w-]{20,200})}" }
-        }
-        multiline {
-          pattern => "%{MYFIELD}"
-          negate => false
-          what => "previous"
-        }     
-        mutate {
-            remove_field => ["app_type"]
-            replace => { 
-              "type" => "combined" 
+          date {
+              match => ["access_time", "dd/MMM/YYYY:HH:mm:ss Z", "UNIX", "yyyy-MM-dd HH:mm:ss", "dd-MMM-yyyy HH:mm:ss"]
+              target => "@timestamp"
+              timezone => "Asia/Shanghai"
+          }
+
+          grok {
+            match => {
+              "message" => "(?<app_type>heroku router)%{DATA}(?<request_id>(?<=request_id=)[^\s]+)?"
             }
-        }
-      } else {
-        if ([message] =~ "heroku (web\.\d+)") {
-          drop {}
-        }
-
-
-        date {
-            match => ["access_time", "dd/MMM/YYYY:HH:mm:ss Z", "UNIX", "yyyy-MM-dd HH:mm:ss", "dd-MMM-yyyy HH:mm:ss"]
-            target => "@timestamp"
-            timezone => "Asia/Shanghai"
-        }
-
-        grok {
-          match => {
-            "message" => "(?<app_type>heroku router)%{DATA}(?<request_id>(?<=request_id=)[^\s]+)"
+            add_field => { "type" => "heroku" }
           }
-          add_field => { "type" => "heroku" }
-        }
 
-        grok {
-          match => {
-            "message" => "(?<app_type>app web\.\d+)%{DATA}%{COMBINEDAPACHELOG} %{QS:x_forworded_for} - \"(?<request_id>[\w,-]{20,200})\""
-          }
-          add_field => { "type" => "nginx" }
-        }
-
-        grok {
-          match => {
-            "message" => "(?<app_type>app web\.\d+)%{DATA}\[(?<date>[\d\-\s:]+)\]%{DATA}%{IP:ip}%{DATA}(?<request_id>(?<=request_id:)[\w-]+)%{DATA}(?<role>(?<=role: )[\w-]+)%{DATA}(?<UserID>(?<=UserID:)\d)%{DATA}(?<path>(?<=request:)[^\|]+)%{DATA}:(?<params>[^$]+)"
-          }
-          add_field => { "type" => "laravel" }
-        }
-        mutate {
-            replace => { 
-              "app_type" => "combine" 
+          grok {
+            match => {
+              "message" => "(?<app_type>app web\.\d+)%{DATA}%{COMBINEDAPACHELOG} %{QS:x_forworded_for} - \"(?<request_id>[\w,-]{20,200})\""
             }
-        }
-      }
-    }
+            add_field => { "type" => "nginx" }
+          }
 
-    output {
-      stdout {}
-      if [app_type] == "combine" {
-        tcp {
-          host => "localhost"
-          port => 4567
-          codec => json_lines
+          grok {
+            match => {
+              "message" => "(?<app_type>app web\.\d+)%{DATA}\[(?<date>[\d\-\s:]+)\]%{DATA}%{IP:ip}%{DATA}(?<request_id>(?<=request_id:)[\w-]+)%{DATA}(?<role>(?<=role: )[\w-]+)%{DATA}(?<UserID>(?<=UserID:)\d)%{DATA}(?<path>(?<=request:)[^\|]+)%{DATA}:(?<params>[^$]+)"
+            }
+            add_field => { "type" => "laravel" }
+          }
         }
-      }
-      if [type] == "combinded" {
-        elasticsearch {
-          hosts => ["elasticsearch:9200"]
-          index => "combinded"
-          user => "elastic"
-          password => "abcd1234"
+        output {
+          #stdout {}
+          pipeline { 
+            send_to => combine
+          }
+          if [type] == "heroku" {
+            elasticsearch {
+              hosts => ["elasticsearch:9200"]
+              index => "heroku"
+              user => "elastic"
+              password => "abcd1234"
+            }
+          }
+          if [type] == "nginx" {
+            elasticsearch {
+              hosts => ["elasticsearch:9200"]
+              index => "nginx"
+              user => "elastic"
+              password => "abcd1234"
+            }
+          }
+          if [type] == "laravel" {
+            elasticsearch {
+              hosts => ["elasticsearch:9200"]
+              index => "laravel"
+              user => "elastic"
+              password => "abcd1234"
+            }
+          }
         }
-      }
-      if [type] == "heroku" {
-        elasticsearch {
-          hosts => ["elasticsearch:9200"]
-          index => "heroku"
-          user => "elastic"
-          password => "abcd1234"
+    - pipeline.id: combine-processing
+      config.string: |
+        input { 
+          pipeline { 
+            address => combine
+          } 
         }
-      }
-      if [type] == "nginx" {
-        elasticsearch {
-          hosts => ["elasticsearch:9200"]
-          index => "nginx"
-          user => "elastic"
-          password => "abcd1234"
+        filter {
+
+          if ([message] !~ "[\w,-]{20,200}") {
+            drop {}
+          }
+
+          grok {
+            match => {
+              "message" => "(?<request_id>[\w,-]{20,200})"
+            }
+          }
+
+          ruby { 
+            init => "@@ruby_tag= ''" 
+            code => "
+                if @@ruby_tag!=event.get('[request_id]')
+                  @@ruby_tag=event.get('[request_id]')
+                  event.set('message','COMBINDED LOG:' + event.get('[message]'))
+                  event.set('type','combined')
+                end
+            "
+          }
+
+          multiline {
+            pattern => "COMBINDED LOG:"
+            negate => true
+            what => "previous"
+          }
+
+          #if ([request_id] == "%{$ruby_tag}") {
+          #  ruby { code => "event.remove('request_id')" }
+          #}else{
+          #  ruby { code => "$ruby_tag= event.get('[request_id]')" }
+          #  mutate {
+          #      replace => { 
+          #        "type" => "combined" 
+          #      }
+          #  }
+          #}
         }
-      }
-      if [type] == "laravel" {
-        elasticsearch {
-          hosts => ["elasticsearch:9200"]
-          index => "laravel"
-          user => "elastic"
-          password => "abcd1234"
+        output {
+          stdout {}
+          elasticsearch {
+            hosts => ["elasticsearch:9200"]
+            index => "combinded"
+            user => "elastic"
+            password => "abcd1234"
+          }
         }
-      }
-    }
