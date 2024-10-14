@@ -20,22 +20,10 @@ data:
     - pipeline.id: syslog-server
       config.string: |
         input { syslog { port => 8088 } }
-        output {
-          pipeline { 
-            send_to => [group,combine]
-          }
-        }
-    - pipeline.id: group-processing
-      config.string: |
-        input { 
-          pipeline { 
-            address => group
-          } 
-        }
         filter {
-          #if ([message] =~ "heroku (web\.\d+)") {
-          #  drop {}
-          #}
+          if ([message] =~ "heroku (web\.\d+)") {
+            drop {}
+          }
 
           date {
               match => ["access_time", "dd/MMM/YYYY:HH:mm:ss Z", "UNIX", "yyyy-MM-dd HH:mm:ss", "dd-MMM-yyyy HH:mm:ss"]
@@ -66,6 +54,9 @@ data:
         }
         output {
           #stdout {}
+          pipeline { 
+            send_to => combine
+          }
           if [type] == "heroku" {
             elasticsearch {
               hosts => ["elasticsearch:9200"]
@@ -99,19 +90,15 @@ data:
           } 
         }
         filter {
-          mutate {
-            gsub => [ "message", "d.8cfd9efd-5870-4ab1-aba8-3a36afb21daa", "" ]
+
+          if ([message] !~ "[\w,-]{20,200}") {
+            drop {}
           }
+
           grok {
             match => {
-              "message" => [
-                  "(?<request_id>(?<=request_id[=:])[\w-]{20,200})",
-                  "- \"(?<request_id>[\w,-]{20,200})\""
-              ]
+              "message" => "(?<request_id>[\w,-]{20,200})"
             }
-          }
-          if ([request_id] !~ "[\w,-]{20,200}") {
-            drop {}
           }
 
           ruby { 
@@ -119,21 +106,30 @@ data:
             code => "
                 event.set('[ruby_request_id]',event.get('[request_id]'))
                 event.set('[ruby_tag]',@@ruby_tag)
-                if @@ruby_tag==event.get('[request_id]')
-                  event.set('[message]','+LOG:' + event.get('[message]'))
-                else
+                if @@ruby_tag!=event.get('[request_id]')
                   @@ruby_tag=event.get('[request_id]')
+                  event.set('[message]','COMBINDED LOG:' + event.get('[message]'))
                   event.set('[type]','combined')
                 end
             "
           }
 
           multiline {
-            pattern => "^\+LOG:"
-            negate => false
+            pattern => "COMBINDED LOG:"
+            negate => true
             what => "previous"
           }
 
+          #if ([request_id] == "%{$ruby_tag}") {
+          #  ruby { code => "event.remove('request_id')" }
+          #}else{
+          #  ruby { code => "$ruby_tag= event.get('[request_id]')" }
+          #  mutate {
+          #      replace => { 
+          #        "type" => "combined" 
+          #      }
+          #  }
+          #}
         }
         output {
           stdout {}
