@@ -21,14 +21,14 @@ data:
         input { syslog { port => 8088 } }
         output {
           pipeline {
-            send_to => [group,combine]
+            send_to => [index,combine]
           }
         }
-    - pipeline.id: group-processing
+    - pipeline.id: index-processing
       config.string: |
         input {
           pipeline {
-            address => group
+            address => index
           }
         }
         filter {
