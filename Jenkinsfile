@@ -1,12 +1,12 @@
 pipeline {
     agent any
     triggers {
-        github {
+        github )
             events {
                 changed()
                 submitted()
             }
-	}
+	)
     }
     stages {
         stage('Build') {
