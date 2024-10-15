@@ -33,10 +33,6 @@ data:
           } 
         }
         filter {
-          #if ([message] =~ "heroku (web\.\d+)") {
-          #  drop {}
-          #}
-
           date {
               match => ["access_time", "dd/MMM/YYYY:HH:mm:ss Z", "UNIX", "yyyy-MM-dd HH:mm:ss", "dd-MMM-yyyy HH:mm:ss"]
               target => "@timestamp"
@@ -127,13 +123,11 @@ data:
                 end
             "
           }
-
           multiline {
             pattern => "^\+LOG:"
             negate => false
             what => "previous"
           }
-
         }
         output {
           stdout {}
