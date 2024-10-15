@@ -1,15 +1,5 @@
 pipeline {
     agent any
-    GenericTrigger(
-    	genericVariables: [
-     		[key: 'service', value: '$.service'],
-     		[key: 'image', value: '$.image']
-     	],
-     	token: env.JENKINS_TOKEN,
-     	causeString: 'Triggered by $image',
-     	printContributedVariables: true,
-     	printPostContent: true
-    )
 
     stages {
         stage('Build') {
