@@ -98,6 +98,7 @@ data:
           mutate {
             gsub => [ "message", "d.8cfd9efd-5870-4ab1-aba8-3a36afb21daa", "" ]
           }
+
           grok {
             match => {
               "message" => [
@@ -106,6 +107,7 @@ data:
               ]
             }
           }
+
           if ([request_id] !~ "[\w,-]{20,200}") {
             drop {}
           }
