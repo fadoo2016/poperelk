@@ -53,15 +53,42 @@ spec:
             - bash 
             - -c 
             - |
+              bin/logstash-keystore create -f
+              echo "${ES_USERNAME}" | bin/logstash-keystore add ES_USER
+              echo "${ES_PASSWORD}" | bin/logstash-keystore add ES_PWD
+              echo "${LOGSTASH_USERNAME}" | bin/logstash-keystore add LS_USER
+              echo "${LOGSTASH_PASSWORD}" | bin/logstash-keystore add LS_PWD
               bin/logstash-plugin install  file:///tmp/logstash-offline-plugins-8.15.2.zip
               bin/logstash
           args:
             #- "--config.reload.automatic"
           env:
             - name: LS_JAVA_OPTS
-              value: "-Xmx512m"
+              value: "-Xmx512m -Xms512m"
             - name: ELASTICSEARCH_HOSTS
               value: http://elasticsearch:9200
+            - name: LOGSTASH_KEYSTORE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: popersecret
+                  key: ls-keystore-password
+            - name: ELASTICSEARCH_HOSTS
+              value: http://elasticsearch:9200
+            - name: LOGSTASH_KEYSTORE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: popersecret
+                  key: ls-keystore-password
+            - name: ES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: popersecret
+                  key: es-username
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: popersecret
+                  key: es-password
             - name: LOGSTASH_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -84,14 +111,18 @@ spec:
               protocol: TCP
           resources:
             limits:
-              memory: 512Mi
+              memory: 768Mi
               cpu: 0.5
             requests:
               cpu: 0.1
-              memory: 256Mi
+              memory: 512Mi
           volumeMounts:
             - name: config
-              mountPath: /usr/share/logstash/config/
+              mountPath: /usr/share/logstash/config/logstash.yml
+              subPath: logstash.yml
+            - name: config
+              mountPath: /usr/share/logstash/config/pipelines.yml
+              subPath: pipelines.yml
             - name: ls-data
               subPath: logstash-offline-plugins-8.15.2.zip
               readOnly: true

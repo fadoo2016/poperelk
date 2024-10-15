@@ -11,8 +11,8 @@ data:
     #path.config: /usr/share/logstash/pipeline
     config.reload.automatic: true
     xpack.monitoring.enabled: true
-    xpack.monitoring.elasticsearch.username: logstash_system
-    xpack.monitoring.elasticsearch.password: abcd1234
+    xpack.monitoring.elasticsearch.username: ${LS_USER}
+    xpack.monitoring.elasticsearch.password: ${LS_PWD}
     xpack.monitoring.elasticsearch.hosts: ["http://elasticsearch:9200"]
     xpack.monitoring.collection.interval: 10s
 
@@ -70,24 +70,24 @@ data:
             elasticsearch {
               hosts => ["elasticsearch:9200"]
               index => "heroku"
-              user => "elastic"
-              password => "abcd1234"
+              user => "${ES_USER}"
+              password => "${ES_PWD}"
             }
           }
           if [type] == "nginx" {
             elasticsearch {
               hosts => ["elasticsearch:9200"]
               index => "nginx"
-              user => "elastic"
-              password => "abcd1234"
+              user => "${ES_USER}"
+              password => "${ES_PWD}"
             }
           }
           if [type] == "laravel" {
             elasticsearch {
               hosts => ["elasticsearch:9200"]
               index => "laravel"
-              user => "elastic"
-              password => "abcd1234"
+              user => "${ES_USER}"
+              password => "${ES_PWD}"
             }
           }
         }
@@ -140,7 +140,7 @@ data:
           elasticsearch {
             hosts => ["elasticsearch:9200"]
             index => "combinded"
-            user => "elastic"
-            password => "abcd1234"
+            user => "${ES_USER}"
+            password => "${ES_PWD}"
           }
         }
