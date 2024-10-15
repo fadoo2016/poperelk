@@ -1,10 +1,13 @@
 pipeline {
     agent any
-     triggers {
-         github {}
-         pollSCM('H/5 * * * *')
-     }
-
+    triggers {
+        github {
+            events {
+                changed()
+                submitted()
+            }
+	}
+    }
     stages {
         stage('Build') {
             steps {
