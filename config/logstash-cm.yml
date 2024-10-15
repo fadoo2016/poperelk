@@ -8,7 +8,6 @@ data:
     http.host: 0.0.0.0
     node.name: logstash
     http.port: 9600
-    #path.config: /usr/share/logstash/pipeline
     config.reload.automatic: true
     xpack.monitoring.enabled: true
     xpack.monitoring.elasticsearch.username: ${LS_USER}
@@ -21,16 +20,16 @@ data:
       config.string: |
         input { syslog { port => 8088 } }
         output {
-          pipeline { 
+          pipeline {
             send_to => [group,combine]
           }
         }
     - pipeline.id: group-processing
       config.string: |
-        input { 
-          pipeline { 
+        input {
+          pipeline {
             address => group
-          } 
+          }
         }
         filter {
           date {
@@ -89,10 +88,10 @@ data:
         }
     - pipeline.id: combine-processing
       config.string: |
-        input { 
-          pipeline { 
+        input {
+          pipeline {
             address => combine
-          } 
+          }
         }
         filter {
           mutate {
@@ -113,10 +112,9 @@ data:
             drop {}
           }
 
-          ruby { 
-            init => "@@ruby_tag= ''" 
+          ruby {
+            init => "@@ruby_tag= ''"
             code => "
-                event.set('[ruby_request_id]',event.get('[request_id]'))
                 event.set('[ruby_tag]',@@ruby_tag)
                 if @@ruby_tag==event.get('[request_id]')
                   event.set('[message]','+LOG:' + event.get('[message]'))
