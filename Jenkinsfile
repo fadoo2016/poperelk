@@ -1,5 +1,18 @@
 pipeline {
     agent any
+    triggers {
+        // 当通过Gerrit代码审查并合并到分支时触发
+        gerritTrigger {
+            events {
+                changed()
+                submitted()
+            }
+        }
+        // 或者使用GitHub的Webhook触发
+        github {
+        }
+        pollSCM('H/5 * * * *') // 每5分钟检查一次更改
+    }
     stages {
         stage('Build') {
             steps {
