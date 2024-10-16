@@ -151,12 +151,6 @@ data:
           }
         }
         filter {
-         #multiline {
-         #  pattern => "^\s"
-         #  negate => false
-         #  what => "previous"
-         #}
-
           grok {
             match => {
               "message" => "\[(?<date>[\d\-\s:]+)\]%{DATA}%{IP:ip}%{DATA}(?<role>(?<=role: )[^\s]+)%{DATA}(?<UserID>(?<=UserID:)\d)%{DATA}(?<path>(?<=request:)[^\|]+)%{DATA}:(?<params>[^\n]*)"
