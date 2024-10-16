@@ -148,6 +148,7 @@ spec:
        #      - key: logstash.conf
        #        path: logstash.conf
 ---
+
 apiVersion: v1
 kind: Service
 metadata:
