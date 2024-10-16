@@ -20,7 +20,7 @@ pipeline {
 			ls -la
 			a=`git rev-parse HEAD`;
 			b=`git log -1 --format="%H" -- config/logstash-cm.yml`;
-			echo $a | grep $b || exit;
+			echo $a | grep $b || exit 0;
 			#echo "The config/logstash-cm.yml file isn't changed in this commit, skip apply!";
 
 			token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
