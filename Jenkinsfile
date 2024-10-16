@@ -18,7 +18,9 @@ pipeline {
 
                 sh '''
 			ls -la
-			if [ "`git rev-parse HEAD`x" != "`git log -1 --format="%H" -- config/logstash-cm.yml`x" ]; then
+			a=`git rev-parse HEAD`;
+			b=`git log -1 --format="%H" -- config/logstash-cm.yml`;
+			if [ x"$a" != x"$b" ]; then
 				echo "The config/logstash-cm.yml file isn't changed in this commit, skip apply!";
 				exit(0);
 			fi
