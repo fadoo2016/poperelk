@@ -53,12 +53,12 @@ spec:
             - bash 
             - -c 
             - |
-              bin/logstash-keystore create -f
-              echo "${ES_USERNAME}" | bin/logstash-keystore add ES_USER
-              echo "${ES_PASSWORD}" | bin/logstash-keystore add ES_PWD
-              echo "${LOGSTASH_USERNAME}" | bin/logstash-keystore add LS_USER
-              echo "${LOGSTASH_PASSWORD}" | bin/logstash-keystore add LS_PWD
-              bin/logstash-plugin install  file:///tmp/logstash-offline-plugins-8.15.2.zip
+              #bin/logstash-keystore create -f
+              #echo "${ES_USERNAME}" | bin/logstash-keystore add ES_USER
+              #echo "${ES_PASSWORD}" | bin/logstash-keystore add ES_PWD
+              #echo "${LOGSTASH_USERNAME}" | bin/logstash-keystore add LS_USER
+              #echo "${LOGSTASH_PASSWORD}" | bin/logstash-keystore add LS_PWD
+              #bin/logstash-plugin install  file:///tmp/logstash-offline-plugins-8.15.2.zip
               bin/logstash
           args:
             #- "--config.reload.automatic"
@@ -111,7 +111,7 @@ spec:
               protocol: TCP
           resources:
             limits:
-              memory: 512Mi
+              memory: 768Mi
               cpu: 0.5
             requests:
               cpu: 0.1

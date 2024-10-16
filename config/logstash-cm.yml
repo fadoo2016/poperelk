@@ -10,8 +10,8 @@ data:
     http.port: 9600
     config.reload.automatic: true
     xpack.monitoring.enabled: true
-    xpack.monitoring.elasticsearch.username: ${LS_USER}
-    xpack.monitoring.elasticsearch.password: ${LS_PWD}
+    xpack.monitoring.elasticsearch.username: ${LOGSTASH_USER}
+    xpack.monitoring.elasticsearch.password: ${LOGSTASH_PASSWORD}
     xpack.monitoring.elasticsearch.hosts: ["http://elasticsearch:9200"]
     xpack.monitoring.collection.interval: 10s
 
@@ -19,54 +19,63 @@ data:
     - pipeline.id: syslog-server
       config.string: |
         input { syslog { port => 8088 } }
-        output {
-          pipeline {
-            send_to => [index,combine]
-          }
-        }
-    - pipeline.id: index-processing
-      config.string: |
-        input {
-          pipeline {
-            address => index
-          }
-        }
         filter {
+          if ([message] =~ "path=\"/build/assets/") {
+            drop {}
+          }
+          if ([message] =~ "path=\"/favicon.ico") {
+            drop {}
+          }
+          mutate {
+            gsub => [ "message", "d.8cfd9efd-5870-4ab1-aba8-3a36afb21daa", "" ]
+          }
           date {
               match => ["access_time", "dd/MMM/YYYY:HH:mm:ss Z", "UNIX", "yyyy-MM-dd HH:mm:ss", "dd-MMM-yyyy HH:mm:ss"]
               target => "@timestamp"
               timezone => "Asia/Shanghai"
           }
-
+        }
+        output {
+          pipeline { send_to => IND }
+        }
+    - pipeline.id: index-processing
+      config.string: |
+        input {
+          pipeline {
+            address => IND
+          }
+        }
+        filter {
           grok {
             match => {
-              "message" => "(?<app_type>heroku router)%{DATA}(?<request_id>(?<=request_id=)[^\s]+)?"
+              "message" => "(?<app_type>heroku router)%{DATA}(?<request_id>(?<=request_id=)[\w-]{20,200})"
             }
             add_field => { "type" => "heroku" }
           }
 
           grok {
             match => {
-              "message" => "(?<app_type>app web\.\d+)%{DATA}%{COMBINEDAPACHELOG} %{QS:x_forworded_for} - \"(?<request_id>[\w,-]{20,200})\""
+              "message" => "(?<app_type>app web\.\d+)%{DATA}%{COMBINEDAPACHELOG} %{QS:x_forworded_for} - \"(?<request_id>[\w-]{20,200})\""
             }
             add_field => { "type" => "nginx" }
           }
 
           grok {
             match => {
-              "message" => "(?<app_type>app web\.\d+)%{DATA}\[(?<date>[\d\-\s:]+)\]%{DATA}%{IP:ip}%{DATA}(?<request_id>(?<=request_id:)[\w-]+)%{DATA}(?<role>(?<=role: )[\w-]+)%{DATA}(?<UserID>(?<=UserID:)\d)%{DATA}(?<path>(?<=request:)[^\|]+)%{DATA}:(?<params>[^$]+)"
+              "message" => "(?<app_type>app web\.\d+)%{DATA}\[(?<date>[\d\-\s:]+)\]%{DATA}%{IP:ip}%{DATA}(?<request_id>(?<=request_id:)[\w-]+)%{DATA}(?<role>(?<=role: )[^\s]+)%{DATA}(?<UserID>(?<=UserID:)\d)%{DATA}(?<path>(?<=request:)[^\|]+)%{DATA}:(?<params>[^$]+)"
             }
             add_field => { "type" => "laravel" }
           }
         }
         output {
           #stdout {}
+          pipeline { send_to => MUL }
           if [type] == "heroku" {
             elasticsearch {
               hosts => ["elasticsearch:9200"]
               index => "heroku"
               user => "${ES_USER}"
-              password => "${ES_PWD}"
+              password => "${ES_PASSWORD}"
             }
           }
           if [type] == "nginx" {
@@ -74,7 +83,7 @@ data:
               hosts => ["elasticsearch:9200"]
               index => "nginx"
               user => "${ES_USER}"
-              password => "${ES_PWD}"
+              password => "${ES_PASSWORD}"
             }
           }
           if [type] == "laravel" {
@@ -82,52 +91,81 @@ data:
               hosts => ["elasticsearch:9200"]
               index => "laravel"
               user => "${ES_USER}"
-              password => "${ES_PWD}"
+              password => "${ES_PASSWORD}"
             }
+          }
+        }
+    - pipeline.id: multi-processing
+      config.string: |
+        input {
+          pipeline {
+            address => MUL
+          }
+        }
+        filter {
+          if ([request_id] !~ "[\w-]{20,200}") {
+            drop{}
+          }
+          ruby {
+            init => "@@ruby_tag= ''"
+            code => "
+                event.set('[ruby_tag]',@@ruby_tag)
+                str='[LOG@'+event.get('[type]')+']:'
+                if @@ruby_tag==event.get('[request_id]')
+                  event.remove('[request_id]')
+                  str='    '+str
+                else
+                  @@ruby_tag=event.get('[request_id]')
+                  event.set('[type]','combined-head')
+                end
+                event.set('[message]',str+event.get('[message]'))
+            "
+          }
+        }
+        output {
+          #stdout {}
+          #pipeline { send_to => COM }
+          file {
+            codec => plain {
+                format => "%{message}"
+            }
+            #message_format => "%{message}"
+            path => "/usr/share/logstash/bin/data/combinded-%{+YYYY-MM-dd}.txt"
           }
         }
     - pipeline.id: combine-processing
       config.string: |
         input {
+          file {
+            path => ["/usr/share/logstash/bin/data/combinded-*.txt"]
+            type => "combinded"
+            start_position => "beginning"
+            codec => multiline {
+              pattern => "^\s"
+              what => "previous"
+              #negate => true
+            }
+          }
           pipeline {
-            address => combine
+            address => COM
           }
         }
         filter {
-          mutate {
-            gsub => [ "message", "d.8cfd9efd-5870-4ab1-aba8-3a36afb21daa", "" ]
-          }
+         #multiline {
+         #  pattern => "^\s"
+         #  negate => false
+         #  what => "previous"
+         #}
 
           grok {
             match => {
-              "message" => [
-                  "(?<request_id>(?<=request_id=)[\w-]{20,200})",
-                  "(?<request_id>(?<=request_id:)[\w-]{20,200})",
-                  "- \"(?<request_id>[\w,-]{20,200})\""
-              ]
+              "message" => "\[(?<date>[\d\-\s:]+)\]%{DATA}%{IP:ip}%{DATA}(?<request_id>(?<=request_id:)[\w-]+)%{DATA}(?<role>(?<=role: )[^\s]+)%{DATA}(?<UserID>(?<=UserID:)\d)%{DATA}(?<path>(?<=request:)[^\|]+)%{DATA}:(?<params>[^\n]*)"
             }
           }
-
-          if ([request_id] !~ "[\w,-]{20,200}") {
-            drop {}
-          }
-
-          ruby {
-            init => "@@ruby_tag= ''"
-            code => "
-                event.set('[ruby_tag]',@@ruby_tag)
-                if @@ruby_tag==event.get('[request_id]')
-                  event.set('[message]','+LOG:' + event.get('[message]'))
-                else
-                  @@ruby_tag=event.get('[request_id]')
-                  event.set('[type]','combined')
-                end
-            "
-          }
-          multiline {
-            pattern => "^\+LOG:"
-            negate => false
-            what => "previous"
+          grok {
+            match => {
+              "message" => "(?<app_type>app web\.\d+)%{DATA}%{COMBINEDAPACHELOG} %{QS:x_forworded_for} - \"(?<request_id>[\w-]{20,200})\""
+            }
           }
         }
         output {
@@ -136,6 +174,6 @@ data:
             hosts => ["elasticsearch:9200"]
             index => "combinded"
             user => "${ES_USER}"
-            password => "${ES_PWD}"
+            password => "${ES_PASSWORD}"
           }
         }
