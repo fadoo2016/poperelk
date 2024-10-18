@@ -150,6 +150,7 @@ data:
             address => COM
           }
         }
+
         filter {
           grok {
             match => {
@@ -162,6 +163,7 @@ data:
             }
           }
         }
+
         output {
           stdout {}
           elasticsearch {
